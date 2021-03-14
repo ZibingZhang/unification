@@ -121,6 +121,9 @@ let second (a, r) = r
 
 let s = TVar("x")
 let t = TCons("f", [TVar("y")])
+
+let p = TCons("A", [TCons("B", [TVar("v"); TCons("C", [TVar("u"); TVar("v")])])])
+let q = TCons("A", [TCons("B", [TVar("w"); TCons("C", [TVar("w"); TCons("D", [TVar("x"); TVar("y")])])])])
 ;;
 
-print_string (subst_to_string (unify t s))
+print_string (subst_to_string (unify p q))
