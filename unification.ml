@@ -11,6 +11,8 @@ type node =
   | NCons of string * node list * int ref * string list ref * node option ref
 
 type subst = (string * node) list
+
+type 'a envt = (string * 'a) list
 ;;
 
 let rec node_to_string (s : node) =
@@ -23,24 +25,60 @@ let rec node_to_string (s : node) =
 
 let rec subst_to_string (o : subst) =
   match o with
-    | [] -> ""
+    | [] -> "\n"
     | (s, t)::r ->
       Printf.sprintf "%s -> %s\n%s"
         s (node_to_string t) (subst_to_string r)
+
+let rec node_envt_to_string (e : node envt) =
+  match e with
+    | [] -> "\n"
+    | (k, v)::r ->
+      Printf.sprintf "%s -> %s\n%s"
+        k (node_to_string v) (node_envt_to_string r)
+;;
+
+let rec find (s : string) (env : 'a envt) =
+  match env with
+    | [] -> None
+    | (k, v)::r ->
+      if String.equal s k
+      then Some v
+      else find s r
+;;
+
+let rec term_to_node (s : term) (env : node envt) =
+  let s_class = ref None in
+  let node, env = begin match s with
+    | TVar(s) ->
+        begin match find s env with
+          | None ->
+            let node = NVar(s, (ref 1), (ref [s]), s_class) in
+            let env = (s, node)::env in 
+              node, env
+          | Some(node) ->
+              node, env
+        end
+    | TConst(n) ->
+        NConst(n, (ref 1), (ref []), s_class), env
+    | TCons(s, l) -> 
+      let args, env = over_args l env [] in
+        NCons(s, args, (ref 1), (ref []), s_class), env
+  end in
+    s_class := Some node;
+    node, env
+
+and over_args (l : term list) (env : node envt) (acc : node list) =
+  match l with
+    | [] -> List.rev acc, env
+    | a::r ->
+      let node, env = term_to_node a env in
+        over_args r env (node::acc)
 ;;
 
 let rec unify (s : term) (t : term) : subst =
-  let rec term_to_node (s : term) =
-    let s_class = ref None in
-    let node = begin match s with
-      | TVar(s) -> NVar(s, (ref 1), (ref [s]), s_class)
-      | TConst(n) -> NConst(n, (ref 1), (ref []), s_class)
-      | TCons(s, l) -> NCons(s, List.map term_to_node l, (ref 1), (ref []), s_class)
-    end in
-      s_class := Some node;
-      node in
-  let s_node = term_to_node s in
-  let t_node = term_to_node t in
+  let s_node, env = term_to_node s [] in
+  let t_node, _ = term_to_node t env in
     unif_closure s_node t_node;
     find_solution s_node []
 
@@ -69,19 +107,17 @@ and union (s : node) (t : node) =
     | NVar(_), _ ->
       t_size := !t_size + !s_size;
       t_vars := !t_vars @ !s_vars;
-      s_class := Some t;
-      ()
+      s_class := Some t
     | _ ->
       s_size := !s_size + !t_size;
       s_vars := !s_vars @ !t_vars;
-      t_class := Some s;
-      ()
+      t_class := Some s
 
 and find_solution (s : node) (o : subst) =
   let s_size, s_vars, s_class = extract_mutable s in
   let t =
     begin match !s_class with
-      | None -> failwith "impossible state"
+      | None -> failwith "Impossible state."
       | Some t -> t
     end in
   let t_size, t_vars, t_class = extract_mutable t in
@@ -95,7 +131,7 @@ and find_solution (s : node) (o : subst) =
           end in
           find_solution_args args o
       | _ -> o
-    end in 
+    end in
   let rec add_vars (vars : string list) (o : subst) =
     begin match vars with
       | [] -> o
@@ -120,10 +156,10 @@ let second (a, r) = r
 ;;
 
 let s = TVar("x")
-let t = TCons("f", [TVar("y")])
+let t = TCons("f", [TVar("x")])
 
 let p = TCons("A", [TCons("B", [TVar("v"); TCons("C", [TVar("u"); TVar("v")])])])
 let q = TCons("A", [TCons("B", [TVar("w"); TCons("C", [TVar("w"); TCons("D", [TVar("x"); TVar("y")])])])])
 ;;
 
-print_string (subst_to_string (unify p q))
+print_string (subst_to_string (unify t t))
