@@ -1,19 +1,34 @@
 (* https://link.springer.com/chapter/10.1007/978-3-030-24986-1_48 *)
 
+(**
+ * IDEA : use a flag to detect cycles during creating of the substitution. 
+ *)
+
+;; (* ========== Data Types ========== *)
+
+(**
+ * Terms exist for ease of manually constructing data.
+ * When unification occurs, all terms get translated into nodes.
+ * TVars of the same name are represented by the same node.
+ *)
 type term =
   | TConst of int
   | TVar of string
   | TCons of string * term list
 
 type node =
+  (* value * size * vars * class *)
   | NConst of int * int ref * string list ref * node option ref
+  (* name * size * vars * class *)
   | NVar of string * int ref * string list ref * node option ref
+  (* name * args * size * vars * class *)
   | NCons of string * node list * int ref * string list ref * node option ref
 
 type subst = (string * node) list
 
 type 'a envt = (string * 'a) list
-;;
+
+;; (* ========== to_string Functions ========== *)
 
 let rec node_to_string (s : node) =
   match s with
@@ -36,7 +51,8 @@ let rec node_envt_to_string (e : node envt) =
     | (k, v)::r ->
       Printf.sprintf "%s -> %s\n%s"
         k (node_to_string v) (node_envt_to_string r)
-;;
+
+;; (* ========== Environment Functions ========== *)
 
 let rec find (s : string) (env : 'a envt) =
   match env with
@@ -45,7 +61,8 @@ let rec find (s : string) (env : 'a envt) =
       if String.equal s k
       then Some v
       else find s r
-;;
+
+;; (* ========== Term->Node Setup Functions ========== *)
 
 let rec term_to_node (s : term) (env : node envt) =
   let s_class = ref None in
@@ -74,7 +91,8 @@ and over_args (l : term list) (env : node envt) (acc : node list) =
     | a::r ->
       let node, env = term_to_node a env in
         over_args r env (node::acc)
-;;
+
+;; (* ========== Unification Functions ========== *)
 
 let rec unify (s : term) (t : term) : subst =
   let s_node, env = term_to_node s [] in
@@ -149,17 +167,15 @@ and extract_mutable (s : node) =
     | NConst(_, size, vars, cls) -> size, vars, cls
     | NVar(_, size, vars, cls) -> size, vars, cls
     | NCons(_, _, size, vars, cls) -> size, vars, cls
-;;
 
-let first (a, r) = a
-let second (a, r) = r
-;;
+;; (* ========== Term Examples ========== *)
 
 let s = TVar("x")
 let t = TCons("f", [TVar("x")])
 
 let p = TCons("A", [TCons("B", [TVar("v"); TCons("C", [TVar("u"); TVar("v")])])])
 let q = TCons("A", [TCons("B", [TVar("w"); TCons("C", [TVar("w"); TCons("D", [TVar("x"); TVar("y")])])])])
-;;
+
+;; (* ========== Unification Examples ========== *)
 
 print_string (subst_to_string (unify t t))
